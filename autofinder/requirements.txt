@@ -1,0 +1,4 @@
+carconnectivity==0.11.11
+carconnectivity-connector-volkswagen==0.10.6
+fastapi==0.162.0
+uvicorn==0.54.0

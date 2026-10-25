@@ -1,0 +1,14 @@
+{
+  "google_maps_api_key": "DEIN_GOOGLE_MAPS_API_KEY",
+  "web_username": "wir",
+  "web_password": "ein-langes-geheimes-passwort",
+  "vw_accounts": [
+    {"username": "deine-vw-id@example.com", "password": "DEIN_VW_PASSWORT"}
+  ],
+  "cars": {
+    "WVWZZZCDZMW000001": {"name": "Golf", "color": "#1a73e8"},
+    "WVWZZZ3CZRE000002": {"name": "Passat", "color": "#d93025"}
+  },
+  "interval_seconds": 300,
+  "port": 8080
+}

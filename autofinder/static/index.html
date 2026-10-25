@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1a73e8">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Unsere Autos</title>
+  <style>
+    :root { --bg: #fff; --fg: #202124; --muted: #5f6368; --card: #fff; --shadow: 0 1px 4px rgba(0,0,0,.3); }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #202124; --fg: #e8eaed; --muted: #9aa0a6; --card: #303134; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #map { position: absolute; inset: 0; }
+    #cars { position: absolute; left: 12px; right: 12px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .car { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px;
+      background: var(--card); box-shadow: var(--shadow); cursor: pointer; }
+    .dot { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+    .info { flex: 1; min-width: 0; }
+    .name { font-weight: 600; }
+    .meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nav { flex: none; border: 0; border-radius: 20px; padding: 10px 16px; font-size: 14px; font-weight: 600;
+      background: #1a73e8; color: #fff; text-decoration: none; }
+    .nav[aria-disabled="true"] { background: var(--muted); pointer-events: none; }
+    #error { display: none; position: absolute; top: 12px; left: 12px; right: 12px; padding: 10px 14px;
+      border-radius: 10px; background: #d93025; color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="error"></div>
+  <div id="cars"></div>
+
+  <script>
+    const MUNICH = { lat: 48.137, lng: 11.575 };
+    const REFRESH_MS = 60 * 1000;
+    let map;
+    const markers = {};
+
+    function age(iso) {
+      if (!iso) return "Position unbekannt";
+      const minutes = Math.round((Date.now() - new Date(iso)) / 60000);
+      if (minutes < 1) return "gerade eben";
+      if (minutes < 60) return `vor ${minutes} Min.`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 48) return `vor ${hours} Std.`;
+      return `vor ${Math.round(hours / 24)} Tagen`;
+    }
+
+    function navUrl(car) {
+      return `https://www.google.com/maps/dir/?api=1&travelmode=walking&destination=${car.latitude},${car.longitude}`;
+    }
+
+    function pin(color) {
+      return {
+        path: "M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7z",
+        fillColor: color, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2,
+        scale: 1.8, anchor: new google.maps.Point(12, 22),
+      };
+    }
+
+    function render(cars) {
+      const list = document.getElementById("cars");
+      list.replaceChildren();
+      const bounds = new google.maps.LatLngBounds();
+      let located = 0;
+
+      for (const car of cars) {
+        const hasPos = car.latitude !== null && car.longitude !== null;
+        const row = document.createElement("div");
+        row.className = "car";
+        row.innerHTML = `
+          <span class="dot"></span>
+          <div class="info"><div class="name"></div><div class="meta"></div></div>
+          <a class="nav" target="_blank" rel="noopener">Hinlaufen</a>`;
+        row.querySelector(".dot").style.background = car.color;
+        row.querySelector(".name").textContent = car.name;
+        row.querySelector(".meta").textContent = [car.address, age(car.updated)].filter(Boolean).join(" · ");
+        const nav = row.querySelector(".nav");
+        if (hasPos) nav.href = navUrl(car); else nav.setAttribute("aria-disabled", "true");
+        list.append(row);
+
+        if (!hasPos) continue;
+        const position = { lat: car.latitude, lng: car.longitude };
+        located++;
+        bounds.extend(position);
+        if (!markers[car.vin]) {
+          markers[car.vin] = new google.maps.Marker({ map, title: car.name, icon: pin(car.color) });
+          markers[car.vin].addListener("click", () => window.open(navUrl(car), "_blank"));
+        }
+        markers[car.vin].setPosition(position);
+        row.addEventListener("click", (event) => {
+          if (event.target === nav) return;
+          map.panTo(position);
+          map.setZoom(17);
+        });
+      }
+      return { bounds, located };
+    }
+
+    async function refresh(fit) {
+      const error = document.getElementById("error");
+      try {
+        const response = await fetch("api/cars", { cache: "no-store" });
+        if (!response.ok) throw new Error(`Server antwortet mit ${response.status}`);
+        const { bounds, located } = render(await response.json());
+        error.style.display = "none";
+        if (fit && located > 1) map.fitBounds(bounds, { bottom: 180, top: 40, left: 40, right: 40 });
+        else if (fit && located === 1) { map.setCenter(bounds.getCenter()); map.setZoom(16); }
+      } catch (err) {
+        error.textContent = `Autos konnten nicht geladen werden: ${err.message}`;
+        error.style.display = "block";
+      }
+    }
+
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: MUNICH, zoom: 13, disableDefaultUI: true, zoomControl: true, clickableIcons: false,
+      });
+      refresh(true);
+      setInterval(() => refresh(false), REFRESH_MS);
+    }
+  </script>
+  <script async src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_API_KEY__&callback=initMap&language=de&region=DE"></script>
+</body>
+</html>
